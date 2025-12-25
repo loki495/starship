@@ -31,6 +31,7 @@ pub struct CustomConfig<'a> {
     pub use_stdin: Option<bool>,
     pub ignore_timeout: bool,
     pub unsafe_no_escape: bool,
+    pub interpret_text_blocks: bool,
 }
 
 impl Default for CustomConfig<'_> {
@@ -52,6 +53,7 @@ impl Default for CustomConfig<'_> {
             use_stdin: None,
             ignore_timeout: false,
             unsafe_no_escape: false,
+            interpret_text_blocks: false,
         }
     }
 }

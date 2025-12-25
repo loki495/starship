@@ -10,8 +10,10 @@ use process_control::{ChildExt, Control, Output};
 use super::{Context, Module, ModuleConfig};
 
 use crate::{
-    config::Either, configs::custom::CustomConfig, formatter::StringFormatter,
+    config::Either,
+    configs::custom::CustomConfig, formatter::StringFormatter,
     utils::create_command,
+    formatter::string_formatter::shell_prompt_escape
 };
 
 /// Creates a custom module with some configuration
@@ -59,21 +61,33 @@ pub fn module<'a>(name: &str, context: &'a Context) -> Option<Module<'a>> {
         }
     }
 
+    let mut format_string = config.format;
+    let escaped_command = shell_prompt_escape(
+        config.command,
+        context.shell,
+    );
+
+    let trimmed = exec_command(&escaped_command, context, &config)?.trim().to_string();
+
+    if config.interpret_text_blocks {
+        format_string = "$output";
+    };
+
+    dbg!(config.interpret_text_blocks, config.unsafe_no_escape, &trimmed, &format_string);
+
     let variables_closure = |variable: &str| match variable {
         "output" => {
-            let output = exec_command(config.command, context, &config)?;
-            let trimmed = output.trim();
-
+            dbg!(
             if trimmed.is_empty() {
                 None
             } else {
                 Some(Ok(trimmed.to_string()))
-            }
+            })
         }
         _ => None,
     };
 
-    let parsed = StringFormatter::new(config.format).and_then(|mut formatter| {
+    let parsed = StringFormatter::new(format_string).and_then(|mut formatter| {
         formatter = formatter
             .map_meta(|var, _| match var {
                 "symbol" => Some(config.symbol),
@@ -84,21 +98,52 @@ pub fn module<'a>(name: &str, context: &'a Context) -> Option<Module<'a>> {
                 _ => None,
             });
 
-        if config.unsafe_no_escape {
-            formatter = formatter.map_no_escaping(variables_closure)
+        if config.unsafe_no_escape && !config.interpret_text_blocks {
+            formatter.map_no_escaping(variables_closure)
         } else {
-            formatter = formatter.map(variables_closure)
-        }
-
-        formatter.parse(None, Some(context))
+                formatter.map(variables_closure)
+            }
+            .parse(None, Some(context))
     });
 
     match parsed {
-        Ok(segments) => module.set_segments(segments),
+        Ok(mut segments) => {
+
+            for seg in &segments {
+                dbg!("BEFORE", seg.value(), seg.style());
+            }
+
+            if config.interpret_text_blocks {
+                let segment = segments.first()?;
+                let undouble_escaped = segment.value().replace("\\","");
+                segments = StringFormatter::new(&undouble_escaped).and_then(|mut formatter| {
+                    formatter = formatter
+                        .map_meta(|var, _| match var {
+                            "symbol" => Some(config.symbol),
+                            _ => None,
+                        })
+                        .map_style(|variable| match variable {
+                            "style" => Some(Ok(config.style)),
+                            _ => None,
+                        });
+
+                    formatter.parse(None, Some(context))
+                }).expect("INVALID STRING");
+
+            }
+
+            for seg in &segments {
+                dbg!("AFTER", seg.value(), seg.style());
+            }
+
+            module.set_segments(segments)
+        }
         Err(error) => {
             log::warn!("Error in module `custom.{name}`:\n{error}");
         }
     };
+
+
     Some(module)
 }
 
