@@ -863,4 +863,122 @@ mod tests {
 
         dir.close()
     }
+
+    #[test]
+    fn interpret_text_blocks_ignores_format() -> io::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let shell = SHELL.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+
+        let actual = ModuleRenderer::new("custom.test")
+            .path(dir.path())
+            .config(toml::toml! {
+                [custom.test]
+                    command = "echo hello"
+                    format = "[$output](bold blue)"
+                    interpret_text_blocks = true
+                    shell = shell
+                    when = true
+                    ignore_timeout = true
+            })
+            .collect();
+
+        // Should apply module format string
+        let expected = Some("hello".to_string());
+        dbg!(&expected, &actual);
+        assert_eq!(expected, actual);
+
+        dir.close()
+    }
+
+    #[test]
+    fn interpret_text_blocks_empty_output() -> io::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let shell = SHELL.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+
+        let actual = ModuleRenderer::new("custom.test")
+            .path(dir.path())
+            .config(toml::toml! {
+                [custom.test]
+                    command = "echo -n ''"
+                    interpret_text_blocks = true
+                    shell = shell
+                    when = true
+                    ignore_timeout = true
+            })
+            .collect();
+
+        let expected = None; // No segments for empty output
+        assert_eq!(expected, actual);
+
+        dir.close()
+    }
+
+    #[test]
+    fn interpret_text_blocks_with_style() -> io::Result<()> {
+        let dir = tempfile::tempdir()?;
+        let shell = SHELL.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+
+        let actual = ModuleRenderer::new("custom.test")
+            .path(dir.path())
+            .config(toml::toml! {
+                [custom.test]
+                    command = "echo \"[purple string](underline purple)\""
+                    interpret_text_blocks = true
+                    shell = shell
+                    when = true
+                    ignore_timeout = true
+            })
+            .collect();
+
+        // Should apply module format string
+        let expected = Some(format!(
+            "{}",
+            Color::Purple.underline().paint("purple string")
+        ));
+        assert_eq!(expected, actual);
+
+        dir.close()
+    }
+
+    #[test]
+    fn interpret_text_blocks_output_is_escaped() -> io::Result<()> {
+        let dir = tempfile::tempdir()?;
+
+        let actual = ModuleRenderer::new("custom.test")
+            .path(dir.path())
+            .config(toml::toml! {
+                [custom.test]
+                command = "echo \"[`to_be_escaped`](red underline)_[second one?](bold white)\""
+                when = true
+                ignore_timeout = true
+                interpret_text_blocks = true
+            })
+            .shell(Shell::Bash)
+            .collect();
+        let expected = Some(format!("{}_{}", Color::Red.underline().paint("\\`to_be_escaped\\`"), Color::White.bold().paint("second one?")));
+        assert_eq!(expected, actual);
+        dir.close()
+    }
+
+    #[test]
+    fn interpret_text_blocks_unsafe_no_escape_is_ignored() -> io::Result<()> {
+        let dir = tempfile::tempdir()?;
+
+        let actual = ModuleRenderer::new("custom.test")
+            .path(dir.path())
+            .config(toml::toml! {
+                [custom.test]
+                command = "echo \"[`to_be_escaped`](red underline)_[second one?](bold white)\""
+                when = true
+                ignore_timeout = true
+                interpret_text_blocks = true
+                unsafe_no_escape = true
+            })
+            .shell(Shell::Bash)
+            .collect();
+        let expected = Some(format!("{}_{}", Color::Red.underline().paint("\\`to_be_escaped\\`"), Color::White.bold().paint("second one?")));
+        assert_eq!(expected, actual);
+        dir.close()
+    }
+
 }
