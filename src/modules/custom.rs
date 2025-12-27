@@ -73,16 +73,13 @@ pub fn module<'a>(name: &str, context: &'a Context) -> Option<Module<'a>> {
         format_string = "$output";
     };
 
-    dbg!(config.interpret_text_blocks, config.unsafe_no_escape, &trimmed, &format_string);
-
     let variables_closure = |variable: &str| match variable {
         "output" => {
-            dbg!(
             if trimmed.is_empty() {
                 None
             } else {
                 Some(Ok(trimmed.to_string()))
-            })
+            }
         }
         _ => None,
     };
@@ -109,10 +106,6 @@ pub fn module<'a>(name: &str, context: &'a Context) -> Option<Module<'a>> {
     match parsed {
         Ok(mut segments) => {
 
-            for seg in &segments {
-                dbg!("BEFORE", seg.value(), seg.style());
-            }
-
             if config.interpret_text_blocks {
                 let segment = segments.first()?;
                 let undouble_escaped = segment.value().replace("\\","");
@@ -130,10 +123,6 @@ pub fn module<'a>(name: &str, context: &'a Context) -> Option<Module<'a>> {
                     formatter.parse(None, Some(context))
                 }).expect("INVALID STRING");
 
-            }
-
-            for seg in &segments {
-                dbg!("AFTER", seg.value(), seg.style());
             }
 
             module.set_segments(segments)
@@ -884,7 +873,6 @@ mod tests {
 
         // Should apply module format string
         let expected = Some("hello".to_string());
-        dbg!(&expected, &actual);
         assert_eq!(expected, actual);
 
         dir.close()
